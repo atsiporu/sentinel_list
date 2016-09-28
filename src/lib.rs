@@ -1,5 +1,3 @@
-#![feature(pub_restricted)]
-
 pub mod sentinel_list
 {
 	use std::ptr;
@@ -7,8 +5,8 @@ pub mod sentinel_list
 	
 	pub struct Link<T>
 	{
-		pub(sentinel_list) next: *mut Link<T>,
-		pub(sentinel_list) prev: *mut Link<T>,
+		pub next: *mut Link<T>,
+		pub prev: *mut Link<T>,
 		pub value: Option<T>,
 	}
 
@@ -26,7 +24,7 @@ pub mod sentinel_list
 
 	pub type Handle<T> = Box<Link<T>>;
 
-	pub(super) fn new_sentinel<T>() -> Handle<T>
+	pub fn new_sentinel<T>() -> Handle<T>
 	{
 		let mut h = Box::new(
 			Link { 
@@ -40,12 +38,12 @@ pub mod sentinel_list
 		h
 	}
 
-	pub(super) fn new_handle<T>(v: T) -> Handle<T>
+	pub fn new_handle<T>(v: T) -> Handle<T>
 	{
 		Box::new(Link::new(v))
 	}
 
-	pub(super) fn insert_after<T>(after: &mut Handle<T>, h: &mut Handle<T>)
+	pub fn insert_after<T>(after: &mut Handle<T>, h: &mut Handle<T>)
 	{
 		let n: *mut _ = after.next;
 
