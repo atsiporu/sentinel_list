@@ -1,4 +1,48 @@
-pub mod sentinel_list
+//! The `sentinel_list` crate provides a simple sentinel based list implementation.
+//! Once you insert element to the list you are given back a handle into this list.
+//! This handle allows you to remove element from the list in O(1) time.
+//!
+//! # Examples
+//!
+//! ```rust
+//! extern crate sentinel_list;
+//! use sentinel_list::{new_sentinel, new_handle, insert_after, debug_print};
+//!
+//! fn main() {
+//!     let mut s = new_sentinel();
+//!     let mut h1 = new_handle(1);
+//!     let mut h2 = new_handle(2);
+//!     let mut h3 = new_handle(3);
+//!     let mut h4 = new_handle(4);
+//! 
+//!     println!("\nObjects:");
+//!     println!("{:p} {:?}", s, s.value);
+//!     println!("{:p} {:?}", h1, h1.value);
+//!     println!("{:p} {:?}", h2, h2.value);
+//!     println!("{:p} {:?}", h3, h3.value);
+//!     println!("{:p} {:?}", h4, h4.value);
+//!     
+//!     insert_after(&mut s, &mut h1);
+//!     insert_after(&mut h1, &mut h2);
+//!     insert_after(&mut h2, &mut h3);
+//!     insert_after(&mut h3, &mut h4);
+//!     
+//!     println!("\nLinked:");
+//!     println!("{:p} {:?}", s, s.value);
+//!     println!("{:p} {:?}", h1, h1.value);
+//!     println!("{:p} {:?}", h2, h2.value);
+//!     println!("{:p} {:?}", h3, h3.value);
+//!     println!("{:p} {:?}", h4, h4.value);
+//!     
+//!     
+//!     println!("\nDebug-print:");
+//!     debug_print(&mut s);
+//! }
+//! ```
+
+pub use self::sentinel_list::{new_handle, new_sentinel, Handle, insert_after, debug_print};
+
+mod sentinel_list
 {
 	use std::ptr;
 	use std::fmt::Debug;
@@ -56,7 +100,7 @@ pub mod sentinel_list
 		n.prev = &mut **h;
 	}
 
-	fn debug_print<T: Debug>(s: &mut Handle<T>)
+	pub fn debug_print<T: Debug>(s: &mut Handle<T>)
 	{
 		let mut h = s.next;
 		while h != &mut **s {
@@ -69,10 +113,38 @@ pub mod sentinel_list
 
 #[cfg(test)]
 mod tests {
-	use sentinel_list;
+	use sentinel_list::{new_sentinel, new_handle, debug_print, insert_after};
 
 	#[test]
 	fn it_works() {
-		let mut s = sentinel_list::new_sentinel();
+        let mut s = new_sentinel();
+        let mut h1 = new_handle(1);
+        let mut h2 = new_handle(2);
+        let mut h3 = new_handle(3);
+        let mut h4 = new_handle(4);
+
+
+        println!("\nObjects:");
+        println!("{:p} {:?}", s, s.value);
+        println!("{:p} {:?}", h1, h1.value);
+        println!("{:p} {:?}", h2, h2.value);
+        println!("{:p} {:?}", h3, h3.value);
+        println!("{:p} {:?}", h4, h4.value);
+
+        insert_after(&mut s, &mut h1);
+        insert_after(&mut h1, &mut h2);
+        insert_after(&mut h2, &mut h3);
+        insert_after(&mut h3, &mut h4);
+        
+        println!("\nLinked:");
+        println!("{:p} {:?}", s, s.value);
+        println!("{:p} {:?}", h1, h1.value);
+        println!("{:p} {:?}", h2, h2.value);
+        println!("{:p} {:?}", h3, h3.value);
+        println!("{:p} {:?}", h4, h4.value);
+
+
+        println!("\nDebug-print:");
+        debug_print(&mut s);
 	}
 }
