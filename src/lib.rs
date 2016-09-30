@@ -18,13 +18,16 @@
 //!		assert_eq!(&1, l.peek_head().unwrap());
 //!		assert_eq!(&3, l.peek_tail().unwrap());
 //!	 }
-//!	 h1.unlink();
+//!	 let e1 = h1.unlink();
 //!	 assert_eq!(&2, l.peek_head().unwrap());
-//!	 h3.unlink();
+//!	 let e3 = h3.unlink();
 //!	 assert_eq!(&2, l.peek_tail().unwrap());
-//!	 h2.unlink();
+//!	 let e2 = h2.unlink();
 //!	 assert_eq!(None, l.peek_tail());
 //!	 assert_eq!(None, l.peek_head());
+//!	 assert_eq!(1, e1);
+//!	 assert_eq!(2, e2);
+//!	 assert_eq!(3, e3);
 //! }
 //! ```
 
@@ -37,7 +40,7 @@ use std::ops::Deref;
 
 pub trait ListHandle<T>
 {
-	fn unlink(self);
+	fn unlink(self) -> T;
 	fn as_ref(&self) -> &T;
 }
 
@@ -113,9 +116,11 @@ impl<T: fmt::Debug> fmt::Debug for Link<T>
 
 impl<T> ListHandle<T> for Handle<T>
 {
-	fn unlink(self)
+	fn unlink(self) -> T
 	{
-		unlink(self);
+		// if you call it on the sentinel 
+		// you deserve to get what's coming
+		unlink(self).unwrap()
 	}
 
 	fn as_ref(&self) -> &T
@@ -167,12 +172,13 @@ fn insert_after<T>(after: &mut Link<T>, h: &mut Link<T>)
 	n.prev = &mut *h;
 }
 
-fn unlink<T>(h: Handle<T>)
+fn unlink<T>(h: Handle<T>) -> Option<T>
 {
 	let prev = unsafe { &mut *h.prev };
 	let next = unsafe { &mut *h.next };
 	next.prev = prev;
 	prev.next = next;
+    h.value
 }
 
 #[cfg(test)]
