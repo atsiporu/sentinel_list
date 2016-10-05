@@ -44,6 +44,16 @@ pub trait ListHandle<T>
 	fn as_ref(&self) -> &T;
 }
 
+pub struct Iter<'a, T: 'a>
+{
+	next: &'a Link<T>,
+}
+
+pub struct IterMut<'a, T: 'a>
+{
+	next: Option<&'a mut Link<T>>,
+}
+
 pub struct List<T>
 {
 	sentinel: Handle<T>,
@@ -78,10 +88,64 @@ impl<T> List<T>
 		link.value.as_ref()
 	}
 	
+	pub fn peek_head_mut(&mut self) -> Option<&mut T>
+	{
+		let link = unsafe { &mut *self.sentinel.next };
+		link.value.as_mut()
+	}
+
 	pub fn peek_tail(&self) -> Option<&T>
 	{
 		let link = unsafe { &*self.sentinel.prev };
 		link.value.as_ref()
+	}
+
+	pub fn peek_tail_mut(&mut self) -> Option<&mut T>
+	{
+		let link = unsafe { &mut *self.sentinel.prev };
+		link.value.as_mut()
+	}
+
+	pub fn iter(&self) -> Iter<T>
+	{
+		Iter { next: unsafe {&*self.sentinel.next} }
+	}
+
+	pub fn iter_mut(&mut self) -> IterMut<T>
+	{
+		let next = Some(unsafe {&mut *self.sentinel.next});
+		let inext = next.map(|v| {
+			v
+		});
+		IterMut { next: inext }
+	}
+}
+
+impl<'a, T> Iterator for Iter<'a, T>
+{
+	type Item = &'a T;
+
+	fn next(&mut self) -> Option<Self::Item>
+	{
+		self.next.value.as_ref().and_then(|v| {
+			self.next = unsafe {&*self.next.next};
+			Some(v)
+		})
+	}
+}
+
+impl<'a, T> Iterator for IterMut<'a, T>
+{
+	type Item = &'a mut T;
+
+	fn next(&mut self) -> Option<Self::Item>
+	{
+		self.next.take().and_then(|link| {
+			self.next = Some(unsafe {&mut *link.next});
+			link.value.as_mut().map(|v| {
+				v
+			})
+		})
 	}
 }
 
@@ -178,7 +242,7 @@ fn unlink<T>(h: Handle<T>) -> Option<T>
 	let next = unsafe { &mut *h.next };
 	next.prev = prev;
 	prev.next = next;
-    h.value
+	h.value
 }
 
 #[cfg(test)]
@@ -243,4 +307,55 @@ fn link_unlink()
 	assert_eq!(unsafe {&*s.next}, &*s);
 	
 	unlink(s);
+}
+
+#[cfg(test)]
+#[test]
+fn iter_test()
+{
+	let l = &mut List::new();
+	let h1 = l.push_head(1);
+	let h2 = l.push_tail(2);
+	let h3 = l.push_tail(3);
+
+	let mut i = l.iter();
+	assert_eq!(Some(&1), i.next());
+	assert_eq!(Some(&2), i.next());
+	assert_eq!(Some(&3), i.next());
+	assert_eq!(None, i.next());
+}
+
+#[cfg(test)]
+#[test]
+fn iter_mut_test()
+{
+	let l = &mut List::new();
+	let h1 = l.push_head(1);
+	let h2 = l.push_tail(2);
+	let h3 = l.push_tail(3);
+
+	{
+	let mut i = l.iter_mut();
+	assert_eq!(Some(&mut 1), i.next());
+	assert_eq!(Some(&mut 2), i.next());
+	assert_eq!(Some(&mut 3), i.next());
+	assert_eq!(None, i.next());
+	}
+
+	l.iter_mut().fold(3, |i, v| {
+		*v = i;
+		i - 1
+	});
+
+	{
+	let mut i = l.iter_mut();
+	assert_eq!(Some(&mut 3), i.next());
+	assert_eq!(Some(&mut 2), i.next());
+	assert_eq!(Some(&mut 1), i.next());
+	assert_eq!(None, i.next());
+	}
+	
+	assert_eq!(&3, h1.as_ref());
+	assert_eq!(&2, h2.as_ref());
+	assert_eq!(&1, h3.as_ref());
 }
