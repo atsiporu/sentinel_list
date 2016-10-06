@@ -35,7 +35,7 @@
 
 use std::ptr;
 use std::fmt;
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
 
 
 pub trait ListHandle<T>
@@ -59,25 +59,35 @@ pub struct List<T>
 	sentinel: Handle<T>,
 }
 
+#[derive(PartialEq)]
+struct Link<T>
+{
+	pub next: *mut Link<T>,
+	pub prev: *mut Link<T>,
+	pub value: Option<T>,
+}
+
+struct Handle<T>(*mut Link<T>);
+
 impl<T> List<T>
 {
 	pub fn new() -> Self
 	{
 		List {
-			sentinel: new_sentinel(),
+			sentinel: Handle::new_sentinel(),
 		}
 	}
 
 	pub fn push_head(&mut self, e: T) -> impl ListHandle<T>
 	{
-		let mut h = new_handle(e);
+		let mut h = Handle::new(e);
 		insert_after(&mut self.sentinel, &mut h);
 		h
 	}
 
 	pub fn push_tail(&mut self, e: T) -> impl ListHandle<T>
 	{
-		let mut h = new_handle(e);
+		let mut h = Handle::new(e);
 		insert_after(unsafe {&mut *self.sentinel.prev}, &mut h);
 		h
 	}
@@ -149,16 +159,6 @@ impl<'a, T> Iterator for IterMut<'a, T>
 	}
 }
 
-#[derive(PartialEq)]
-struct Link<T>
-{
-	pub next: *mut Link<T>,
-	pub prev: *mut Link<T>,
-	pub value: Option<T>,
-}
-
-type Handle<T> = Box<Link<T>>;
-
 impl<T> Link<T>
 {
 	fn new(v: T) -> Link<T>
@@ -169,6 +169,47 @@ impl<T> Link<T>
 			value: Some(v),
 		}
 	}
+
+    // just unlinks
+    // after calling this it's unsafe to use
+    // this Handle without adjusting prev, next
+    fn unlink(&mut self)
+    {
+        let prev = unsafe { &mut *self.prev };
+        let next = unsafe { &mut *self.next };
+        next.prev = prev;
+        prev.next = next;
+    }
+
+}
+impl<T> Handle<T>
+{
+    fn new(v: T) -> Self
+    {
+	    Handle(Box::into_raw(Box::new(Link::new(v))))
+    }
+
+	fn new_sentinel() -> Self 
+	{
+		let mut h = Box::new(
+			Link { 
+				prev: ptr::null_mut(), 
+				next: ptr::null_mut(),
+				value: None,
+			}
+		);
+		h.prev = &mut *h;
+		h.next = &mut *h;
+		Handle(Box::into_raw(h))
+	}
+    
+    fn into_inner(self) -> Option<T>
+    {
+        let mut h = self;
+        let link = unsafe { &mut *h.0 };
+        link.unlink();
+        link.value.take()
+    }
 }
 
 impl<T: fmt::Debug> fmt::Debug for Link<T>
@@ -178,13 +219,28 @@ impl<T: fmt::Debug> fmt::Debug for Link<T>
 	}
 }
 
+impl<T> Drop for Handle<T>
+{
+    fn drop(&mut self)
+    {
+        let link = unsafe { &mut *self.0 };
+        link.unlink();
+        if !self.0.is_null() {
+            let h = unsafe { Box::from_raw(self.0) };
+            drop(h);
+        }
+        // not sure if this matters
+        //println!("Drop");
+    }
+}
+
 impl<T> ListHandle<T> for Handle<T>
 {
 	fn unlink(self) -> T
 	{
 		// if you call it on the sentinel 
 		// you deserve to get what's coming
-		unlink(self).unwrap()
+		self.into_inner().unwrap()
 	}
 
 	fn as_ref(&self) -> &T
@@ -204,23 +260,21 @@ impl<T> Deref for Link<T>
 	}
 }
 
-fn new_sentinel<T>() -> Handle<T>
+impl<T> Deref for Handle<T>
 {
-	let mut h = Box::new(
-		Link { 
-			prev: ptr::null_mut(), 
-			next: ptr::null_mut(),
-			value: None,
-		}
-	);
-	h.prev = &mut *h;
-	h.next = &mut *h;
-	h
+	type Target = Link<T>;
+	fn deref(&self) -> &Self::Target
+	{
+		unsafe {&*self.0}
+	}
 }
 
-fn new_handle<T>(v: T) -> Handle<T>
+impl<T> DerefMut for Handle<T>
 {
-	Box::new(Link::new(v))
+	fn deref_mut(&mut self) -> &mut Self::Target
+	{
+		unsafe {&mut *self.0}
+	}
 }
 
 fn insert_after<T>(after: &mut Link<T>, h: &mut Link<T>)
@@ -234,15 +288,6 @@ fn insert_after<T>(after: &mut Link<T>, h: &mut Link<T>)
 	
 	let n = unsafe { &mut *h.next };
 	n.prev = &mut *h;
-}
-
-fn unlink<T>(h: Handle<T>) -> Option<T>
-{
-	let prev = unsafe { &mut *h.prev };
-	let next = unsafe { &mut *h.next };
-	next.prev = prev;
-	prev.next = next;
-	h.value
 }
 
 #[allow(dead_code)]
@@ -261,10 +306,10 @@ fn debug_print<T: fmt::Debug>(s: &mut Handle<T>)
 #[test]
 fn link_unlink()
 {
-	let mut s = new_sentinel();
-	let mut h1 = new_handle(1);
-	let mut h2 = new_handle(2);
-	let mut h3 = new_handle(3);
+	let mut s = Handle::new_sentinel();
+	let mut h1 = Handle::new(1);
+	let mut h2 = Handle::new(2);
+	let mut h3 = Handle::new(3);
 	
 	insert_after(&mut s,  &mut h1);
 	insert_after(&mut h1, &mut h2);
@@ -282,7 +327,7 @@ fn link_unlink()
 	assert_eq!(unsafe {&*h3.next}, &*s);
 	assert_eq!(unsafe {&*s.prev}, &*h3);
 
-	unlink(h2);
+	h2.into_inner();
 
 	assert_eq!(unsafe {&*s.next}, &*h1);
 	assert_eq!(unsafe {&*h1.prev}, &*s);
@@ -293,21 +338,21 @@ fn link_unlink()
 	assert_eq!(unsafe {&*h3.next}, &*s);
 	assert_eq!(unsafe {&*s.prev}, &*h3);
 	
-	let mut h2 = new_handle(2);
+	let mut h2 = Handle::new(2);
 	insert_after(&mut h1, &mut h2);
 	
-	unlink(h1);
+	h1.into_inner();
 	assert_eq!(unsafe {&*s.next}, &*h2);
-	unlink(h2);
+	h2.into_inner();
 	assert_eq!(unsafe {&*s.next}, &*h3);
 	assert_eq!(unsafe {&*s.prev}, &*h3);
 	assert_eq!(unsafe {&*h3.prev}, &*s);
 	assert_eq!(unsafe {&*h3.next}, &*s);
-	unlink(h3);
+	h3.into_inner();
 	assert_eq!(unsafe {&*s.prev}, &*s);
 	assert_eq!(unsafe {&*s.next}, &*s);
 	
-	unlink(s);
+	s.into_inner();
 }
 
 #[cfg(test)]
@@ -316,17 +361,19 @@ fn iter_test()
 {
 	let l = &mut List::new();
 	let h1 = l.push_head(1);
+    {
 	let h2 = l.push_tail(2);
-	let h3 = l.push_tail(3);
+    }
+    let h3 = l.push_tail(3);
 
 	let mut i = l.iter();
 	assert_eq!(Some(&1), i.next());
-	assert_eq!(Some(&2), i.next());
+	//assert_eq!(Some(&2), i.next());
 	assert_eq!(Some(&3), i.next());
 	assert_eq!(None, i.next());
 
     h1.unlink();
-    h2.unlink();
+    //h2.unlink();
     h3.unlink();
 }
 
@@ -363,4 +410,30 @@ fn iter_mut_test()
 	assert_eq!(&3, h1.as_ref());
 	assert_eq!(&2, h2.as_ref());
 	assert_eq!(&1, h3.as_ref());
+}
+
+#[cfg(test)]
+//#[test]
+fn test_drop()
+{
+    let line = &mut String::new();
+    
+    std::io::stdin().read_line(line);
+	
+    let mut s = Handle::new_sentinel();
+    let mut vec = vec![];
+
+    for i in 1..100000 {
+        let mut h = Handle::new(vec![0u32;1000]);
+        insert_after(&mut s,  &mut h);
+        vec.push(h);
+    }
+    
+    std::io::stdin().read_line(line);
+
+    while !vec.is_empty() {
+        vec.pop().unwrap().into_inner();
+    }
+    
+    std::io::stdin().read_line(line);
 }
