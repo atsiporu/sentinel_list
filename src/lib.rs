@@ -245,6 +245,7 @@ fn unlink<T>(h: Handle<T>) -> Option<T>
 	h.value
 }
 
+#[allow(dead_code)]
 #[cfg(test)]
 fn debug_print<T: fmt::Debug>(s: &mut Handle<T>)
 {
@@ -323,6 +324,10 @@ fn iter_test()
 	assert_eq!(Some(&2), i.next());
 	assert_eq!(Some(&3), i.next());
 	assert_eq!(None, i.next());
+
+    h1.unlink();
+    h2.unlink();
+    h3.unlink();
 }
 
 #[cfg(test)]
